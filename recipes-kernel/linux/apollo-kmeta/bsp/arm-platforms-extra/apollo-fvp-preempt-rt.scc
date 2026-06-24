@@ -1,0 +1,10 @@
+#
+# SPDX-License-Identifier: MIT
+#
+
+define KMACHINE apollo-fvp
+define KTYPE preempt-rt
+define KARCH arm64
+
+include ktypes/preempt-rt/preempt-rt.scc
+include apollo-fvp.scc
