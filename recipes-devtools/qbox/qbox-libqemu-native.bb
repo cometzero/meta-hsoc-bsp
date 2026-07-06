@@ -20,7 +20,9 @@ OECMAKE_SOURCEPATH = "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}"
 LIBQEMU_TARGETS = "aarch64"
 
 DEPENDS = "glib-2.0-native \
+           jpeg-native \
            libslirp-native \
+           libsdl2-native \
            meson-native \
            ninja-native \
            pixman-native \
@@ -28,10 +30,25 @@ DEPENDS = "glib-2.0-native \
            python3-native \
            zlib-native"
 
+OECMAKE_C_FLAGS:append = " -isystem${STAGING_INCDIR_NATIVE}/SDL2"
+OECMAKE_CXX_FLAGS:append = " -isystem${STAGING_INCDIR_NATIVE}/SDL2"
+
 EXTRA_OECMAKE += "-DLIBQEMU_TARGETS=${LIBQEMU_TARGETS} \
                   -DLIBQEMU_BUILD_ALWAYS=OFF \
                   -DLIBQEMU_HEADLESS=ON \
+                  -DLIBQEMU_PYTHON=${HOSTTOOLS_DIR}/python3 \
                   -DLIBQEMU_QEMU_SOURCE_DIR=${EXTERNALSRC}"
+
+do_compile:prepend() {
+    export CPATH="${STAGING_INCDIR_NATIVE}/SDL2${CPATH:+:${CPATH}}"
+}
+
+do_install:append() {
+    rm -rf "${D}${datadir}/qemu" "${D}${datadir}/icons"
+    rm -f "${D}${datadir}/applications/qemu.desktop"
+    rmdir --ignore-fail-on-non-empty "${D}${datadir}/applications" || true
+    rmdir --ignore-fail-on-non-empty "${D}${datadir}" || true
+}
 
 do_configure:prepend() {
     if [ ! -d "${EXTERNALSRC}" ]; then
@@ -50,12 +67,16 @@ do_configure:prepend() {
     install -m 0644 "${EXTERNALSRC}/libqemuConfig.cmake.in" \
         "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}/libqemuConfig.cmake.in"
 
-    patch -p1 -d "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}" < \
-        "${UNPACKDIR}/0001-qemu-cmake-add-headless-native-libqemu-option.patch"
+    if ! grep -q "option(LIBQEMU_HEADLESS" \
+        "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}/qemu.cmake"; then
+        patch -p1 -d "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}" < \
+            "${UNPACKDIR}/0001-qemu-cmake-add-headless-native-libqemu-option.patch"
+    fi
 }
 
 do_deploy() {
     qbox_libqemu_deploy_dir="${DEPLOYDIR}/qbox-apollo-qvp/libqemu"
+    qbox_libqemu_share_dir="${B}/qemu-prefix/share"
 
     rm -rf "${qbox_libqemu_deploy_dir}"
     install -d "${qbox_libqemu_deploy_dir}"
@@ -67,7 +88,9 @@ do_deploy() {
     cp -R "${D}${libdir}" "${qbox_libqemu_deploy_dir}/"
     cp -R "${D}${includedir}" "${qbox_libqemu_deploy_dir}/"
 
-    if [ -d "${D}${datadir}" ]; then
+    if [ -d "${qbox_libqemu_share_dir}" ]; then
+        cp -R "${qbox_libqemu_share_dir}" "${qbox_libqemu_deploy_dir}/"
+    elif [ -d "${D}${datadir}" ]; then
         cp -R "${D}${datadir}" "${qbox_libqemu_deploy_dir}/"
     fi
 
