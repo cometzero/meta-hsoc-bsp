@@ -6,9 +6,7 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=6541297aed25bfd5e8d893ea097e838c \
                     file://COPYING;md5=a3b50d8b88dcc0eb3d7d39b760b9e821 \
                     file://COPYING.LIB;md5=f4457173749eb816989d739d14ba7c13"
 
-SRC_URI = "file://0001-qemu-cmake-add-headless-native-libqemu-option.patch"
-
-inherit cmake externalsrc deploy native
+inherit cmake externalsrc deploy pkgconfig python3native native
 
 EXTERNALSRC = "${HSOC_APOLLO_QEMU_SRC}"
 EXTERNALSRC_BUILD = "${WORKDIR}/build"
@@ -28,15 +26,26 @@ DEPENDS = "glib-2.0-native \
            pixman-native \
            pkgconfig-native \
            python3-native \
+           python3-setuptools-native \
+           python3-wheel-native \
            zlib-native"
+
+PACKAGECONFIG ??= "sdl \
+                   ${@bb.utils.contains('DISTRO_FEATURES', 'opengl', 'opengl', '', d)}"
+
+PACKAGECONFIG[gtk] = "-DLIBQEMU_ENABLE_GTK=ON,-DLIBQEMU_ENABLE_GTK=OFF,gtk+3 gettext-native"
+PACKAGECONFIG[opengl] = "-DLIBQEMU_ENABLE_OPENGL=ON,-DLIBQEMU_ENABLE_OPENGL=OFF,libepoxy"
+PACKAGECONFIG[sdl] = "-DLIBQEMU_ENABLE_SDL=ON,-DLIBQEMU_ENABLE_SDL=OFF,libsdl2"
+PACKAGECONFIG[sdl-image] = "-DLIBQEMU_ENABLE_SDL_IMAGE=ON,-DLIBQEMU_ENABLE_SDL_IMAGE=OFF,libsdl2-image"
+PACKAGECONFIG[vnc] = "-DLIBQEMU_ENABLE_VNC=ON,-DLIBQEMU_ENABLE_VNC=OFF"
+PACKAGECONFIG[vnc-jpeg] = "-DLIBQEMU_ENABLE_VNC_JPEG=ON,-DLIBQEMU_ENABLE_VNC_JPEG=OFF,jpeg"
 
 OECMAKE_C_FLAGS:append = " -isystem${STAGING_INCDIR_NATIVE}/SDL2"
 OECMAKE_CXX_FLAGS:append = " -isystem${STAGING_INCDIR_NATIVE}/SDL2"
 
 EXTRA_OECMAKE += "-DLIBQEMU_TARGETS=${LIBQEMU_TARGETS} \
                   -DLIBQEMU_BUILD_ALWAYS=OFF \
-                  -DLIBQEMU_HEADLESS=ON \
-                  -DLIBQEMU_PYTHON=${HOSTTOOLS_DIR}/python3 \
+                  -DLIBQEMU_PYTHON=${PYTHON} \
                   -DLIBQEMU_QEMU_SOURCE_DIR=${EXTERNALSRC}"
 
 do_compile:prepend() {
@@ -67,11 +76,6 @@ do_configure:prepend() {
     install -m 0644 "${EXTERNALSRC}/libqemuConfig.cmake.in" \
         "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}/libqemuConfig.cmake.in"
 
-    if ! grep -q "option(LIBQEMU_HEADLESS" \
-        "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}/qemu.cmake"; then
-        patch -p1 -d "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}" < \
-            "${UNPACKDIR}/0001-qemu-cmake-add-headless-native-libqemu-option.patch"
-    fi
 }
 
 do_deploy() {

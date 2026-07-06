@@ -8,7 +8,7 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=3d73035ac3b78bacc2fa00f27073ad9d \
                     file://${HSOC_APOLLO_QEMU_SRC}/COPYING;md5=a3b50d8b88dcc0eb3d7d39b760b9e821 \
                     file://${HSOC_APOLLO_QEMU_SRC}/COPYING.LIB;md5=f4457173749eb816989d739d14ba7c13"
 
-inherit cmake externalsrc deploy python3native native
+inherit cmake externalsrc deploy pkgconfig python3native native
 
 EXTERNALSRC = "${HSOC_APOLLO_QBOX_PLATFORM_SRC}"
 EXTERNALSRC_BUILD = "${WORKDIR}/build"
@@ -82,7 +82,19 @@ DEPENDS = "qbox-libqemu-native \
            pixman-native \
            pkgconfig-native \
            python3-native \
+           python3-setuptools-native \
+           python3-wheel-native \
            zlib-native"
+
+PACKAGECONFIG ??= "sdl \
+                   ${@bb.utils.contains('DISTRO_FEATURES', 'opengl', 'opengl', '', d)}"
+
+PACKAGECONFIG[gtk] = "-DLIBQEMU_ENABLE_GTK=ON,-DLIBQEMU_ENABLE_GTK=OFF,gtk+3 gettext-native"
+PACKAGECONFIG[opengl] = "-DLIBQEMU_ENABLE_OPENGL=ON,-DLIBQEMU_ENABLE_OPENGL=OFF,libepoxy"
+PACKAGECONFIG[sdl] = "-DLIBQEMU_ENABLE_SDL=ON,-DLIBQEMU_ENABLE_SDL=OFF,libsdl2"
+PACKAGECONFIG[sdl-image] = "-DLIBQEMU_ENABLE_SDL_IMAGE=ON,-DLIBQEMU_ENABLE_SDL_IMAGE=OFF,libsdl2-image"
+PACKAGECONFIG[vnc] = "-DLIBQEMU_ENABLE_VNC=ON,-DLIBQEMU_ENABLE_VNC=OFF"
+PACKAGECONFIG[vnc-jpeg] = "-DLIBQEMU_ENABLE_VNC_JPEG=ON,-DLIBQEMU_ENABLE_VNC_JPEG=OFF,jpeg"
 
 EXTRA_OECMAKE += "-DQBOX_CORE_SOURCE_DIR=${HSOC_APOLLO_QBOX_SRC} \
                   -DQBOX_QEMU_SOURCE_DIR=${HSOC_APOLLO_QEMU_SRC} \
@@ -92,8 +104,7 @@ EXTRA_OECMAKE += "-DQBOX_CORE_SOURCE_DIR=${HSOC_APOLLO_QBOX_SRC} \
                   -DFETCHCONTENT_SOURCE_DIR_LIBQEMU=${HSOC_APOLLO_QEMU_SRC} \
                   -DLIBQEMU_GIT=file://${HSOC_APOLLO_QEMU_SRC} \
                   -DLIBQEMU_BUILD_ALWAYS=OFF \
-                  -DLIBQEMU_HEADLESS=ON \
-                  -DLIBQEMU_PYTHON=${HOSTTOOLS_DIR}/python3 \
+                  -DLIBQEMU_PYTHON=${PYTHON} \
                   -DGS_ENABLE_VIRCLRENDERER=OFF \
                   -DGS_ENABLE_VIRGLRENDERER=OFF \
                   -DPython3_INCLUDE_DIR=${PYTHON_INCLUDE_DIR} \
