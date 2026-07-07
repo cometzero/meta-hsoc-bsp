@@ -1,12 +1,13 @@
 SUMMARY = "Apollo QVP native QBox runtime bundle"
 DESCRIPTION = "Builds the Apollo QVP host-side QBox runtime from local qbox-platform, qbox, and QEMU/libqemu source trees and deploys a runnable native bundle."
 HOMEPAGE = "https://github.com/quic/qbox"
-LICENSE = "BSD-3-Clause & GPL-2.0-only & LGPL-2.1-only"
+LICENSE = "BSD-3-Clause & GPL-2.0-only & LGPL-2.1-only & MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=3d73035ac3b78bacc2fa00f27073ad9d \
                     file://${HSOC_APOLLO_QBOX_SRC}/LICENSE;md5=3d73035ac3b78bacc2fa00f27073ad9d \
                     file://${HSOC_APOLLO_QEMU_SRC}/LICENSE;md5=6541297aed25bfd5e8d893ea097e838c \
                     file://${HSOC_APOLLO_QEMU_SRC}/COPYING;md5=a3b50d8b88dcc0eb3d7d39b760b9e821 \
-                    file://${HSOC_APOLLO_QEMU_SRC}/COPYING.LIB;md5=f4457173749eb816989d739d14ba7c13"
+                    file://${HSOC_APOLLO_QEMU_SRC}/COPYING.LIB;md5=f4457173749eb816989d739d14ba7c13 \
+                    file://${THISDIR}/files/CPM-${CPM_VERSION}.cmake;beginline=5;endline=24;md5=9dd5d132b3fe59521a1d0dc7cd7a8d0d"
 
 inherit cmake externalsrc deploy pkgconfig python3native native
 
@@ -16,6 +17,9 @@ S = "${EXTERNALSRC}"
 B = "${EXTERNALSRC_BUILD}"
 
 QBOX_APOLLO_BUILD_TARGET ?= "apollo_fvp_full_system"
+CPM_VERSION = "0.40.5"
+CPM_SOURCE_FILE = "${THISDIR}/files/CPM-${CPM_VERSION}.cmake"
+CPM_SHA256 = "c46b876ae3b9f994b4f05a4c15553e0485636862064f1fcc9d8b4f832086bc5d"
 
 QBOX_APOLLO_REQUIRED_TARGETS = "platforms-vp \
     keep_alive \
@@ -97,14 +101,11 @@ PACKAGECONFIG[vnc] = "-DLIBQEMU_ENABLE_VNC=ON,-DLIBQEMU_ENABLE_VNC=OFF"
 PACKAGECONFIG[vnc-jpeg] = "-DLIBQEMU_ENABLE_VNC_JPEG=ON,-DLIBQEMU_ENABLE_VNC_JPEG=OFF,jpeg"
 
 EXTRA_OECMAKE += "-DQBOX_CORE_SOURCE_DIR=${HSOC_APOLLO_QBOX_SRC} \
-                  -DQBOX_QEMU_SOURCE_DIR=${HSOC_APOLLO_QEMU_SRC} \
-                  -DQEMU_SOURCE_DIR=${HSOC_APOLLO_QEMU_SRC} \
                   -DFETCHCONTENT_FULLY_DISCONNECTED=OFF \
-                  -DFETCHCONTENT_SOURCE_DIR_QEMU=${HSOC_APOLLO_QEMU_SRC} \
-                  -DFETCHCONTENT_SOURCE_DIR_LIBQEMU=${HSOC_APOLLO_QEMU_SRC} \
-                  -DLIBQEMU_GIT=file://${HSOC_APOLLO_QEMU_SRC} \
-                  -DLIBQEMU_BUILD_ALWAYS=OFF \
-                  -DLIBQEMU_PYTHON=${PYTHON} \
+                  -DCPM_SOURCE_FILE=${CPM_SOURCE_FILE} \
+                  -DQBOX_USE_SYSTEM_LIBQEMU=ON \
+                  -DBUILD_TESTING=OFF \
+                  -DENABLE_PYTHON_BINDER=OFF \
                   -DGS_ENABLE_VIRCLRENDERER=OFF \
                   -DGS_ENABLE_VIRGLRENDERER=OFF \
                   -DPython3_INCLUDE_DIR=${PYTHON_INCLUDE_DIR} \
@@ -114,10 +115,17 @@ EXTRA_OECMAKE += "-DQBOX_CORE_SOURCE_DIR=${HSOC_APOLLO_QBOX_SRC} \
 OECMAKE_TARGET_COMPILE = "${QBOX_APOLLO_BUILD_TARGET}"
 do_install[noexec] = "1"
 do_deploy[depends] += "firmware-apollo-qvp:do_deploy"
+do_configure[network] = "1"
 
 do_configure:prepend() {
     if [ ! -f "${EXTERNALSRC}/CMakeLists.txt" ]; then
         bbfatal "HSOC_APOLLO_QBOX_PLATFORM_SRC is not a qbox-platform source tree: ${EXTERNALSRC}"
+    fi
+    if [ ! -s "${CPM_SOURCE_FILE}" ]; then
+        bbfatal "CPM.cmake is not available: ${CPM_SOURCE_FILE}"
+    fi
+    if ! echo "${CPM_SHA256}  ${CPM_SOURCE_FILE}" | sha256sum -c - >/dev/null; then
+        bbfatal "CPM.cmake checksum mismatch: ${CPM_SOURCE_FILE}"
     fi
     if [ ! -f "${HSOC_APOLLO_QBOX_SRC}/CMakeLists.txt" ]; then
         bbfatal "HSOC_APOLLO_QBOX_SRC is not a qbox source tree: ${HSOC_APOLLO_QBOX_SRC}"
@@ -142,6 +150,7 @@ python do_deploy() {
     core_src = Path(d.getVar("HSOC_APOLLO_QBOX_SRC")).resolve()
     qemu_src = Path(d.getVar("HSOC_APOLLO_QEMU_SRC")).resolve()
     deploy_dir = Path(d.getVar("DEPLOY_DIR_IMAGE")).resolve()
+    native_sysroot_lib = Path(d.getVar("RECIPE_SYSROOT_NATIVE")).resolve() / "usr/lib"
     tmpdir = Path(d.getVar("TMPDIR")).resolve()
     machine = d.getVar("MACHINE")
     machine_arch = d.getVar("MACHINE_ARCH")
@@ -149,6 +158,7 @@ python do_deploy() {
     required_targets = d.getVar("QBOX_APOLLO_REQUIRED_TARGETS").split()
 
     search_roots = [build_dir]
+    libqemu_search_roots = [build_dir, native_sysroot_lib]
     required_entries = []
     optional_entries = []
 
@@ -464,7 +474,7 @@ python do_deploy() {
 
     copy_file(find_one("libqbox.so", search_roots), Path("lib/libqbox.so"), "shared-library")
     copy_file(
-        find_one("libqemu-system-aarch64.so", search_roots),
+        find_one("libqemu-system-aarch64.so", libqemu_search_roots),
         Path("lib/libqemu-system-aarch64.so"),
         "shared-library",
     )
@@ -476,6 +486,22 @@ python do_deploy() {
             build_dir / "_deps/rpclib-build/librpc.so*",
             build_dir / "_deps/systemccci-build/configuration/src/libcci-config.so*",
             build_dir / "_deps/systemclanguage-build/src/libsystemc.so*",
+            native_sysroot_lib / "libSDL2-2.0.so*",
+            native_sysroot_lib / "libX11.so*",
+            native_sysroot_lib / "libXau.so*",
+            native_sysroot_lib / "libXdmcp.so*",
+            native_sysroot_lib / "libbz2.so*",
+            native_sysroot_lib / "libffi.so*",
+            native_sysroot_lib / "libgio-2.0.so*",
+            native_sysroot_lib / "libglib-2.0.so*",
+            native_sysroot_lib / "libgmodule-2.0.so*",
+            native_sysroot_lib / "libgobject-2.0.so*",
+            native_sysroot_lib / "libpcre2-8.so*",
+            native_sysroot_lib / "libpixman-1.so*",
+            native_sysroot_lib / "libslirp.so*",
+            native_sysroot_lib / "libxcb.so*",
+            native_sysroot_lib / "libz.so*",
+            native_sysroot_lib / "libzstd.so*",
         )
     )
 
