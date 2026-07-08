@@ -118,6 +118,39 @@ qbox_apollo_install_module() {
     qbox_apollo_install_file "$artifact" "${D}${QBOX_APOLLO_MODULEDIR}/$(basename "$artifact")" 0644
 }
 
+qbox_apollo_install_runtime_library_dir() {
+    srcdir="$1"
+
+    if [ ! -d "$srcdir" ]; then
+        bbfatal "qbox-apollo-qvp-native: missing required runtime library directory: $srcdir"
+    fi
+
+    install -d "${D}${libdir}"
+    find "$srcdir" -maxdepth 1 \( -type f -o -type l \) -name "lib*.so*" | sort | while read -r lib; do
+        base="$(basename "$lib")"
+        if [ -L "$lib" ]; then
+            ln -sf "$(readlink "$lib")" "${D}${libdir}/$base"
+        else
+            install -m 0644 "$lib" "${D}${libdir}/$base"
+        fi
+    done
+}
+
+qbox_apollo_install_runtime_libraries() {
+    qbox_apollo_install_runtime_library_dir "${B}/_deps/report-build"
+    qbox_apollo_install_runtime_library_dir "${B}/_deps/fmt-build"
+    qbox_apollo_install_runtime_library_dir "${B}/_deps/systemccci-build/configuration/src"
+    qbox_apollo_install_runtime_library_dir "${B}/_deps/systemccci-build/inspection/src"
+    qbox_apollo_install_runtime_library_dir "${B}/_deps/systemclanguage-build/src"
+    qbox_apollo_install_runtime_library_dir "${B}/_deps/rpclib-build"
+
+    for required in libreporting.so libfmt.so.9 libcci-config.so.1.0 libsystemc.so.3.0 librpc.so; do
+        if [ ! -e "${D}${libdir}/$required" ]; then
+            bbfatal "qbox-apollo-qvp-native: missing installed runtime library: ${libdir}/$required"
+        fi
+    done
+}
+
 qbox_apollo_install_data_tree() {
     srcdir="$1"
     destdir="$2"
@@ -173,6 +206,7 @@ do_install() {
     if [ -n "$liblua" ]; then
         qbox_apollo_install_file "$liblua" "${D}${libdir}/liblua.so" 0644
     fi
+    qbox_apollo_install_runtime_libraries
 
     for target in $required_targets; do
         if [ "$target" = "platforms-vp" ]; then

@@ -13,6 +13,25 @@ QBOX_LIBQEMU_NATIVE_CMAKE_DIR = "${WORKDIR}/qbox-libqemu-native-cmake"
 OECMAKE_SOURCEPATH = "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}"
 
 LIBQEMU_TARGETS = "aarch64"
+QBOX_LIBQEMU_NATIVE_PACKAGECONFIG ?= "opengl sdl vnc vnc-jpeg"
+PACKAGECONFIG ??= "${QBOX_LIBQEMU_NATIVE_PACKAGECONFIG}"
+
+PACKAGECONFIG[gtk] = "-DLIBQEMU_ENABLE_GTK=ON,-DLIBQEMU_ENABLE_GTK=OFF,gtk+3-native gettext-native"
+PACKAGECONFIG[opengl] = ",,libepoxy-native"
+PACKAGECONFIG[sdl] = ",,libsdl2-native"
+PACKAGECONFIG[sdl-image] = "-DLIBQEMU_ENABLE_SDL_IMAGE=ON,-DLIBQEMU_ENABLE_SDL_IMAGE=OFF,libsdl2-image-native"
+PACKAGECONFIG[vnc] = ",,"
+PACKAGECONFIG[vnc-jpeg] = ",,jpeg-native"
+
+QBOX_LIBQEMU_NATIVE_SDL_CFLAGS = "${@bb.utils.contains('PACKAGECONFIG', 'sdl', ' -isystem${STAGING_INCDIR_NATIVE}/SDL2', '', d)}"
+OECMAKE_C_FLAGS:append = "${QBOX_LIBQEMU_NATIVE_SDL_CFLAGS}"
+OECMAKE_CXX_FLAGS:append = "${QBOX_LIBQEMU_NATIVE_SDL_CFLAGS}"
+
+do_compile:prepend() {
+    if ${@bb.utils.contains('PACKAGECONFIG', 'sdl', 'true', 'false', d)}; then
+        export CPATH="${STAGING_INCDIR_NATIVE}/SDL2${CPATH:+:${CPATH}}"
+    fi
+}
 
 DEPENDS = "glib-2.0-native \
            meson-native"
