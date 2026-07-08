@@ -59,8 +59,8 @@ LIC_FILES_CHKSUM:pn-trusted-firmware-m:apollo-fvp = " \
     file://${UNPACKDIR}/git/t_cose/LICENSE;md5=b2ebdbfb82602b97aa628f64cf4b65ad \
 "
 
-do_configure[depends] += "quilt-native:do_populate_sysroot"
-do_configure[prefuncs] += "do_apply_local_src_patches"
+do_apply_local_src_patches[depends] += "quilt-native:do_populate_sysroot"
+addtask do_apply_local_src_patches after do_unpack before do_configure
 
 do_configure:prepend:pn-trusted-firmware-m:apollo-fvp() {
     install -d ${TRUSTED_FIRMWARE_M_HSOC_APOLLO_BL1_KEYS_DIR}
