@@ -15,11 +15,16 @@ EXTERNALSRC = "${HSOC_APOLLO_QBOX_PLATFORM_SRC}"
 SRC_URI += "file://CPM-${CPM_VERSION}.cmake"
 
 QBOX_APOLLO_BUILD_TARGET ?= "apollo_fvp_full_system"
+QBOX_APOLLO_RUN_UNIT_TESTS ?= "0"
+QBOX_APOLLO_UNIT_TEST_TARGET ?= "qbox_platform_systemc_component_tests"
+QBOX_APOLLO_UNIT_TEST_LABEL ?= "qbox-platform-systemc-components"
 CPM_VERSION = "0.40.5"
 CPM_SOURCE_FILE = "${UNPACKDIR}/CPM-${CPM_VERSION}.cmake"
 CPM_SHA256 = "c46b876ae3b9f994b4f05a4c15553e0485636862064f1fcc9d8b4f832086bc5d"
 
 QBOX_APOLLO_REQUIRED_TARGETS = ""
+PACKAGECONFIG:append = "${@bb.utils.contains('QBOX_APOLLO_RUN_UNIT_TESTS', '1', ' unit-tests', '', d)}"
+PACKAGECONFIG[unit-tests] = "-DBUILD_TESTING=ON,-DBUILD_TESTING=OFF"
 
 DEPENDS = "qbox-libqemu-native \
            asio-native \
@@ -31,7 +36,6 @@ EXTRA_OECMAKE += "-DQBOX_CORE_SOURCE_DIR=${HSOC_APOLLO_QBOX_SRC} \
                   -DFETCHCONTENT_FULLY_DISCONNECTED=OFF \
                   -DCPM_SOURCE_FILE=${CPM_SOURCE_FILE} \
                   -DQBOX_USE_SYSTEM_LIBQEMU=ON \
-                  -DBUILD_TESTING=OFF \
                   -DENABLE_PYTHON_BINDER=OFF \
                   -DGS_ENABLE_VIRCLRENDERER=OFF \
                   -DGS_ENABLE_VIRGLRENDERER=OFF \
@@ -245,3 +249,26 @@ do_install() {
         printf "\n"
     } > "${D}${QBOX_APOLLO_DATADIR}/qbox-apollo-qvp-provider.env"
 }
+
+do_check() {
+    if ! ${@bb.utils.contains('PACKAGECONFIG', 'unit-tests', 'true', 'false', d)}; then
+        bbnote "qbox-apollo-qvp-native unit tests disabled; set QBOX_APOLLO_RUN_UNIT_TESTS = \"1\" or enable PACKAGECONFIG unit-tests"
+        return 0
+    fi
+
+    bbnote "Building Apollo QBox unit test target: ${QBOX_APOLLO_UNIT_TEST_TARGET}"
+    cmake_runcmake_build --target ${QBOX_APOLLO_UNIT_TEST_TARGET}
+
+    list_log="${T}/qbox-unit-tests.list"
+    bbnote "Listing Apollo QBox unit tests with label: ${QBOX_APOLLO_UNIT_TEST_LABEL}"
+    ctest --test-dir "${B}" -N -L "${QBOX_APOLLO_UNIT_TEST_LABEL}" | tee "$list_log"
+    if ! grep -Eq 'Total Tests: [1-9][0-9]*' "$list_log"; then
+        bbfatal "qbox-apollo-qvp-native: no CTest tests matched ${QBOX_APOLLO_UNIT_TEST_LABEL}"
+    fi
+
+    bbnote "Running Apollo QBox unit tests with label: ${QBOX_APOLLO_UNIT_TEST_LABEL}"
+    ctest --test-dir "${B}" -L "${QBOX_APOLLO_UNIT_TEST_LABEL}" --output-on-failure
+}
+do_check[doc] = "Build and run Apollo QBox native unit tests with CTest"
+do_check[dirs] = "${B}"
+addtask check after do_compile before do_install
