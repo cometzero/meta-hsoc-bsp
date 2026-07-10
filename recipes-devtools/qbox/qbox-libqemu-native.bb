@@ -43,6 +43,9 @@ EXTRA_OECMAKE += "-DLIBQEMU_TARGETS=${LIBQEMU_TARGETS} \
                   -DLIBQEMU_QEMU_SOURCE_DIR=${EXTERNALSRC}"
 
 do_install:append() {
+    # These host QEMU data files are also staged by qemu-native.
+    rm -f "${D}${datadir}/qemu/trace-events-all"
+    rm -rf "${D}${datadir}/qemu/keymaps"
     rm -rf "${D}${datadir}/icons"
     rm -f "${D}${datadir}/applications/qemu.desktop"
     rmdir --ignore-fail-on-non-empty "${D}${datadir}/applications" || true
