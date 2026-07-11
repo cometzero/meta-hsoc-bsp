@@ -14,6 +14,14 @@ require qbox-native-common.inc
 EXTERNALSRC = "${HSOC_APOLLO_QBOX_PLATFORM_SRC}"
 SRC_URI += "file://CPM-${CPM_VERSION}.cmake"
 
+QBOX_CORE_TREE_HASH_FILES = "${@srctree_hash_files(d, d.getVar('HSOC_APOLLO_QBOX_SRC'))}"
+
+python __anonymous() {
+    qbox_core_hash_files = d.getVar('QBOX_CORE_TREE_HASH_FILES')
+    d.appendVarFlag('do_configure', 'file-checksums', ' ' + qbox_core_hash_files)
+    d.appendVarFlag('do_compile', 'file-checksums', ' ' + qbox_core_hash_files)
+}
+
 QBOX_APOLLO_BUILD_TARGET ?= "apollo_fvp_full_system"
 QBOX_APOLLO_RUN_UNIT_TESTS ?= "0"
 QBOX_APOLLO_UNIT_TEST_TARGET ?= "qbox_platform_systemc_component_tests"
