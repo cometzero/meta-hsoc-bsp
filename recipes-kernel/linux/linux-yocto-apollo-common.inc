@@ -36,8 +36,8 @@ APOLLO_KERNEL_FEATURES_REMOVE = "\
 KERNEL_FEATURES:remove = "${APOLLO_KERNEL_FEATURES_REMOVE}"
 
 do_defconfig() {
-    bbplain "Applying ${APOLLO_KERNEL_DEFCONFIG} to ${B}/.config"
-    oe_runmake -C ${S} O=${B} ${APOLLO_KERNEL_DEFCONFIG}
+    bbplain "Applying ${APOLLO_KERNEL_DEFCONFIG} and Yocto kernel configuration fragments to ${B}/.config"
+    do_kernel_configme
 }
 do_defconfig[dirs] = "${B}"
 do_defconfig[nostamp] = "1"
