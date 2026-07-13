@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: MIT
 #
 
-require recipes-bsp/images/uefi-capsule-fvp-rd-aspen.bb
+APOLLO_UEFI_CAPSULE_MACHINE = "apollo-fvp"
 
-SUMMARY = "The UEFI capsule generation for apollo-fvp"
-DESCRIPTION = "A recipe to generate apollo-fvp UEFI capsule using the RD-Aspen firmware layout."
-COMPATIBLE_MACHINE = "apollo-fvp"
+require uefi-capsule-apollo-common.inc
