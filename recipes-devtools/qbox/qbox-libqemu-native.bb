@@ -37,7 +37,7 @@ DEPENDS = "glib-2.0-native \
            meson-native"
 
 EXTRA_OECMAKE += "-DLIBQEMU_TARGETS=${LIBQEMU_TARGETS} \
-                  -DLIBQEMU_BUILD_ALWAYS=OFF \
+                  -DLIBQEMU_BUILD_ALWAYS=ON \
                   -DLIBQEMU_PYTHON=${PYTHON} \
                   -DLIBQEMU_EXTRA_CONFIGURE_ARGS=--disable-download \
                   -DLIBQEMU_QEMU_SOURCE_DIR=${EXTERNALSRC}"
