@@ -1,15 +1,23 @@
 SUMMARY = "Apollo QVP native libqemu sysroot provider"
 DESCRIPTION = "Builds the local Apollo QBox libqemu dependency from hsoc-stack/tools/qemu and installs the native aarch64 libqemu output into the native sysroot."
 HOMEPAGE = "https://github.com/qemu/qemu"
-LICENSE = "GPL-2.0-only & LGPL-2.1-only"
+LICENSE = "GPL-2.0-only & LGPL-2.1-only & (GPL-2.0-or-later | BSD-3-Clause)"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=6541297aed25bfd5e8d893ea097e838c \
                     file://COPYING;md5=a3b50d8b88dcc0eb3d7d39b760b9e821 \
-                    file://COPYING.LIB;md5=f4457173749eb816989d739d14ba7c13"
+                    file://COPYING.LIB;md5=f4457173749eb816989d739d14ba7c13 \
+                    file://${UNPACKDIR}/keycodemapdb/LICENSE.BSD;md5=5ae30ba4123bc4f2fa49aa0b0dce887b \
+                    file://${UNPACKDIR}/keycodemapdb/LICENSE.GPL2;md5=751419260aa954499f7abaabaa882bbe"
 
 require qbox-native-common.inc
 
 EXTERNALSRC = "${HSOC_APOLLO_QEMU_SRC}"
+EXTERNALSRC_SYMLINKS = ""
+SRC_URI += "git://gitlab.com/qemu-project/keycodemapdb.git;protocol=https;nobranch=1;name=keycodemapdb;destsuffix=keycodemapdb;type=git-dependency"
+SRCREV_keycodemapdb = "f5772a62ec52591ff6870b7e8ef32482371f22c6"
+SRCREV_FORMAT = "keycodemapdb"
+
 QBOX_LIBQEMU_NATIVE_CMAKE_DIR = "${WORKDIR}/qbox-libqemu-native-cmake"
+QBOX_LIBQEMU_NATIVE_KEYCODEMAPDB_SRC = "${UNPACKDIR}/keycodemapdb"
 OECMAKE_SOURCEPATH = "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}"
 
 LIBQEMU_TARGETS = "aarch64"
@@ -34,11 +42,15 @@ do_compile:prepend() {
 }
 
 DEPENDS = "glib-2.0-native \
+           dtc-native \
            meson-native"
 
 EXTRA_OECMAKE += "-DLIBQEMU_TARGETS=${LIBQEMU_TARGETS} \
                   -DLIBQEMU_BUILD_ALWAYS=ON \
                   -DLIBQEMU_PYTHON=${PYTHON} \
+                  -DLIBQEMU_KEYCODEMAPDB_SOURCE_DIR=${QBOX_LIBQEMU_NATIVE_KEYCODEMAPDB_SRC} \
+                  -DLIBQEMU_USE_SYSTEM_FDT=ON \
+                  -DLIBQEMU_BUILD_TESTS=OFF \
                   -DLIBQEMU_EXTRA_CONFIGURE_ARGS=--disable-download \
                   -DLIBQEMU_QEMU_SOURCE_DIR=${EXTERNALSRC}"
 
@@ -73,7 +85,6 @@ do_configure:prepend() {
     if [ ! -f "${EXTERNALSRC}/CMakeLists.txt" ] || [ ! -x "${EXTERNALSRC}/configure" ]; then
         bbfatal "HSOC_APOLLO_QEMU_SRC is not a QEMU/libqemu source tree: ${EXTERNALSRC}"
     fi
-
     rm -rf "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}"
     install -d "${QBOX_LIBQEMU_NATIVE_CMAKE_DIR}"
     install -m 0644 "${EXTERNALSRC}/CMakeLists.txt" \
