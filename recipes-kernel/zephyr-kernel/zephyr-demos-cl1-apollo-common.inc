@@ -55,6 +55,7 @@ python () {
     unpack_root = os.path.join(d.getVar("UNPACKDIR"), "git")
     safety_island = d.getVar("ZEPHYR_SAFETY_ISLAND_MODULE")
     hsoc_module = d.getVar("HSOC_APOLLO_ZEPHYR_HSOC_MODULE")
+    module_separator = r"\;"
     required_suffixes = tuple(
         os.path.join(unpack_root, suffix)
         for suffix in (d.getVar("ZEPHYR_DEMOS_CL1_APOLLO_MODULE_SUFFIXES") or "").split()
@@ -64,11 +65,11 @@ python () {
     modules = modules.replace(f"{source_root}/", f"{unpack_root}/")
     modules = modules.replace(os.path.join(unpack_root, "safety_island"), safety_island)
     if hsoc_module:
-        modules = f"{modules}\;{hsoc_module}"
+        modules = f"{modules}{module_separator}{hsoc_module}"
 
     filtered_modules = []
     seen_modules = set()
-    for module in modules.split("\;"):
+    for module in modules.split(module_separator):
         module = module.strip()
         if not module:
             continue
@@ -76,7 +77,7 @@ python () {
             filtered_modules.append(module)
             seen_modules.add(module)
 
-    d.setVar("ZEPHYR_MODULES", "\;".join(filtered_modules) + "\;")
+    d.setVar("ZEPHYR_MODULES", module_separator.join(filtered_modules) + module_separator)
 }
 
 python () {
