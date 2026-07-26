@@ -41,6 +41,7 @@ DEPENDS = "qbox-libqemu-native \
            libzip-native"
 
 EXTRA_OECMAKE += "-DQBOX_CORE_SOURCE_DIR=${HSOC_APOLLO_QBOX_SRC} \
+                  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                   -DFETCHCONTENT_FULLY_DISCONNECTED=OFF \
                   -DCPM_SOURCE_FILE=${CPM_SOURCE_FILE} \
                   -DQBOX_USE_SYSTEM_LIBQEMU=ON \
