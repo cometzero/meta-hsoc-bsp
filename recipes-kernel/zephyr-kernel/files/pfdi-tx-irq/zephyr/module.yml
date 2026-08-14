@@ -1,0 +1,3 @@
+name: pfdi_tx_irq
+build:
+  cmake: .
