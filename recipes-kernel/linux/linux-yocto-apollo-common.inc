@@ -17,7 +17,6 @@ SRC_URI:remove = "file://apollo-kmeta;type=kmeta;name=apollo-kmeta;destsuffix=ap
 SRC_URI:remove = "file://modsign.scc file://modsign.cfg"
 SRC_URI:remove = "file://extra-configs.cfg"
 SRC_URI:remove = "file://arm-ffa-transport.cfg"
-SRC_URI:append:auto-ad-nexios = " file://rd-gzip-initrd.cfg"
 
 APOLLO_KERNEL_FEATURES_REMOVE = "\
     cfg/efi.scc \
@@ -35,8 +34,12 @@ APOLLO_KERNEL_FEATURES_REMOVE = "\
 "
 KERNEL_FEATURES:remove = "${APOLLO_KERNEL_FEATURES_REMOVE}"
 
+do_kernel_configme() {
+    bbplain "Applying ${APOLLO_KERNEL_DEFCONFIG} to ${B}/.config"
+    oe_runmake -C ${S} O=${B} ${APOLLO_KERNEL_DEFCONFIG}
+}
+
 do_defconfig() {
-    bbplain "Applying ${APOLLO_KERNEL_DEFCONFIG} and Yocto kernel configuration fragments to ${B}/.config"
     do_kernel_configme
 }
 do_defconfig[dirs] = "${B}"
