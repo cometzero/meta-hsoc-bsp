@@ -6,6 +6,8 @@ from typing import Protocol
 from oeqa.core.decorator.depends import OETestDepends
 from oeqa.runtime.case import OERuntimeTestCase
 
+Pattern = str | re.Pattern[str]
+
 
 class BspTarget(Protocol):
     def run(
@@ -17,7 +19,7 @@ class BspTarget(Protocol):
     def expect(
         self,
         terminal: str,
-        pattern: str | re.Pattern[str],
+        patterns: Pattern | list[Pattern],
         timeout: int,
     ) -> int: ...
 
@@ -126,20 +128,23 @@ class PFDIBspTest(OERuntimeTestCase):
 
     @OETestDepends(["test_64_bsp_pfdi.PFDIBspTest.test_90_force_error"])
     def test_91_fault_propagation(self):
+        expected_patterns: list[Pattern] = [
+            re.compile(r"\[FMU\] (?:Non-critical|Critical) fault received:")
+            for _ in range(self.cpu_count)
+        ]
         for cpu in range(self.cpu_count):
-            self.target.expect(
+            expected_patterns.extend(
+                [
+                    rf"\[SBISTC\] SBISTC_EQ_FAIL_CORE{cpu} detected",
+                    rf"\[PFDI_MONITOR\] Onl PFDI for AP cluster 0 core {cpu} "
+                    r"failed, stopping PFDI monitoring",
+                ]
+            )
+
+        while expected_patterns:
+            matched = self.target.expect(
                 self.scp_console,
-                re.compile(r"\[FMU\] (?:Non-critical|Critical) fault received:"),
+                expected_patterns,
                 timeout=180,
             )
-            self.target.expect(
-                self.scp_console,
-                rf"\[SBISTC\] SBISTC_EQ_FAIL_CORE{cpu} detected",
-                timeout=180,
-            )
-            self.target.expect(
-                self.scp_console,
-                rf"\[PFDI_MONITOR\] Onl PFDI for AP cluster 0 core {cpu} "
-                r"failed, stopping PFDI monitoring",
-                timeout=180,
-            )
+            expected_patterns.pop(matched)
