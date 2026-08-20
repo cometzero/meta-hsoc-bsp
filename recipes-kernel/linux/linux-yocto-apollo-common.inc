@@ -38,6 +38,7 @@ do_kernel_configme() {
     bbplain "Applying ${APOLLO_KERNEL_DEFCONFIG} to ${B}/.config"
     oe_runmake -C ${S} O=${B} ${APOLLO_KERNEL_DEFCONFIG}
 }
+do_kernel_configme[file-checksums] += "${APOLLO_KERNEL_DEFCONFIG_PATH}:True"
 
 do_defconfig() {
     do_kernel_configme
