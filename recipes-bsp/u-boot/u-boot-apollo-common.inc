@@ -17,6 +17,11 @@ apollo_uboot_set_capsule_crt_file() {
 do_defconfig() {
     bbplain "Applying ${APOLLO_UBOOT_DEFCONFIG} to ${B}/.config"
     oe_runmake -C ${S} O=${B} ${APOLLO_UBOOT_DEFCONFIG}
+    config_fragments="${@" ".join(find_cfgs(d))}"
+    if [ -n "${config_fragments}" ]; then
+        merge_config.sh -m -O ${B} ${B}/.config ${config_fragments}
+        oe_runmake -C ${S} O=${B} olddefconfig
+    fi
     apollo_uboot_set_capsule_crt_file
 }
 do_defconfig[dirs] = "${B}"
