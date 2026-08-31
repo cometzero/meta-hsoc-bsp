@@ -4,7 +4,11 @@
 
 inherit externalsrc
 
-FILESEXTRAPATHS:prepend := "${THISDIR}:"
+FILESEXTRAPATHS:prepend := "${THISDIR}:${THISDIR}/files:"
+
+APOLLO_KERNEL_CONFIG_FRAGMENT ?= ""
+APOLLO_KERNEL_CONFIG_FRAGMENT_DIR := "${THISDIR}/files"
+APOLLO_KERNEL_CONFIG_FRAGMENT_PATH = "${APOLLO_KERNEL_CONFIG_FRAGMENT_DIR}/${APOLLO_KERNEL_CONFIG_FRAGMENT}"
 
 EXTERNALSRC:pn-linux-yocto = "${HSOC_APOLLO_LINUX_SRC}"
 EXTERNALSRC_BUILD:pn-linux-yocto = "${WORKDIR}/build"
@@ -37,8 +41,13 @@ KERNEL_FEATURES:remove = "${APOLLO_KERNEL_FEATURES_REMOVE}"
 do_kernel_configme() {
     bbplain "Applying ${APOLLO_KERNEL_DEFCONFIG} to ${B}/.config"
     oe_runmake -C ${S} O=${B} ${APOLLO_KERNEL_DEFCONFIG}
+    if [ -n "${APOLLO_KERNEL_CONFIG_FRAGMENT}" ]; then
+        ${S}/scripts/kconfig/merge_config.sh -m -O ${B} \
+            ${B}/.config ${APOLLO_KERNEL_CONFIG_FRAGMENT_PATH}
+        oe_runmake -C ${S} O=${B} olddefconfig
+    fi
 }
-do_kernel_configme[file-checksums] += "${APOLLO_KERNEL_DEFCONFIG_PATH}:True"
+do_kernel_configme[file-checksums] += "${APOLLO_KERNEL_DEFCONFIG_PATH}:True ${@d.getVar('APOLLO_KERNEL_CONFIG_FRAGMENT_PATH') + ':True' if d.getVar('APOLLO_KERNEL_CONFIG_FRAGMENT') else ''}"
 
 do_defconfig() {
     do_kernel_configme
