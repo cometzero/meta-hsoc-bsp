@@ -25,7 +25,7 @@ python __anonymous() {
 QBOX_APOLLO_BUILD_TARGET ?= "apollo_fvp_full_system"
 QBOX_APOLLO_RUN_UNIT_TESTS ?= "0"
 QBOX_APOLLO_UNIT_TEST_TARGET ?= "qbox_platform_systemc_component_tests"
-QBOX_APOLLO_UNIT_TEST_LABEL ?= "qbox-platform-systemc-components"
+QBOX_APOLLO_UNIT_TEST_LABEL ?= "qbox-platform-systemc-components|runtime-injection"
 CPM_VERSION = "0.40.5"
 CPM_SOURCE_FILE = "${UNPACKDIR}/CPM-${CPM_VERSION}.cmake"
 CPM_SHA256 = "c46b876ae3b9f994b4f05a4c15553e0485636862064f1fcc9d8b4f832086bc5d"
@@ -279,5 +279,7 @@ do_check() {
     ctest --test-dir "${B}" -L "${QBOX_APOLLO_UNIT_TEST_LABEL}" --output-on-failure
 }
 do_check[doc] = "Build and run Apollo QBox native unit tests with CTest"
+# Monitor API tests start a loopback HTTP server in the test process.
+do_check[network] = "1"
 do_check[dirs] = "${B}"
 addtask check after do_compile before do_install
