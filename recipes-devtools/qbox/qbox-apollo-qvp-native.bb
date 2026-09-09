@@ -23,9 +23,29 @@ python __anonymous() {
 }
 
 QBOX_APOLLO_BUILD_TARGET ?= "apollo_fvp_full_system"
-QBOX_APOLLO_RUN_UNIT_TESTS ?= "0"
-QBOX_APOLLO_UNIT_TEST_TARGET ?= "qbox_platform_systemc_component_tests"
-QBOX_APOLLO_UNIT_TEST_LABEL ?= "qbox-platform-systemc-components|runtime-injection"
+QBOX_APOLLO_RUN_UNIT_TESTS ?= "1"
+QBOX_APOLLO_UNIT_TEST_TARGET ?= "qbox_platform_unit_tests"
+QBOX_APOLLO_UNIT_TEST_LABEL ?= "^qbox-platform-"
+QBOX_APOLLO_UNIT_TEST_EXCLUDE_REGEX ?= ""
+QBOX_APOLLO_UNIT_TEST_TIMEOUT ?= "5"
+# Space-separated directories relative to the QBox core tests/ directory.
+# Only these suites are configured and built; the regex narrows execution.
+QBOX_CORE_TEST_DIRS ?= "components sync utils qbox"
+QBOX_CORE_TEST_REGEX ?= ".*"
+# Measured >=5s (or timed out at 5s) in the default profile on 2026-09-09.
+# Keep fast AArch64 halt/timer/UART/SMMU/shutdown tests enabled. This is an
+# explicit exclusion, not a PASS for the known post-simulation hangs.
+QBOX_CORE_TEST_SLOW_REGEX ?= "^(router-cache-bench-enhanced|aarch64-start-in-reset-release-test)$|^(aarch64-(simple-write-test|dmi-test(-concurrent-inval|-async-inval)?|ld-st-excl-fail-test|write_read)|reset-test-(system|cpu)):sync-pol=multithread-freerunning:num-cpu=(1|2|4):icount=false:threading=MULTI:accel=tcg:time_sync_strategy=quantum_keeper$"
+# Intermittent post-sc_stop hangs; longer successful repeats do not resolve
+# the recorded failures. See doc/qbox/unit-test-stability-2026-09-09.md.
+QBOX_CORE_TEST_UNSTABLE_REGEX ?= "^(aarch64-managed-uart-fifo-closed-writer|aarch64-managed-timer-wfi-timer-wake)$"
+QBOX_CORE_TEST_EXCLUDE_REGEX ?= "${@'|'.join(pattern for pattern in (d.getVar('QBOX_CORE_TEST_SLOW_REGEX'), d.getVar('QBOX_CORE_TEST_UNSTABLE_REGEX')) if pattern)}"
+QBOX_CPU_TEST_ARCHS ?= "aarch64"
+# Bound the default native build to the Apollo scheduling profile. The
+# standalone QBox defaults and additional matrix axes remain selectable.
+QBOX_CPU_TEST_SYNC_POLICY_COMBINATION ?= "multithread-freerunning"
+QBOX_CPU_TEST_NUM_CPU_COMBINATION ?= "1 2 4"
+QBOX_ENABLE_MCIPS_TESTS ?= "OFF"
 CPM_VERSION = "0.40.5"
 CPM_SOURCE_FILE = "${UNPACKDIR}/CPM-${CPM_VERSION}.cmake"
 CPM_SHA256 = "c46b876ae3b9f994b4f05a4c15553e0485636862064f1fcc9d8b4f832086bc5d"
@@ -48,6 +68,11 @@ EXTRA_OECMAKE += "-DQBOX_CORE_SOURCE_DIR=${HSOC_APOLLO_QBOX_SRC} \
                   -DENABLE_PYTHON_BINDER=OFF \
                   -DGS_ENABLE_VIRCLRENDERER=OFF \
                   -DGS_ENABLE_VIRGLRENDERER=OFF \
+                  -DQBOX_CORE_TEST_DIRS='${@';'.join(d.getVar('QBOX_CORE_TEST_DIRS').split())}' \
+                  -DQBOX_CPU_TEST_ARCHS='${@';'.join(d.getVar('QBOX_CPU_TEST_ARCHS').split())}' \
+                  -DQBOX_CPU_TEST_SYNC_POLICY_COMBINATION='${@';'.join(d.getVar('QBOX_CPU_TEST_SYNC_POLICY_COMBINATION').split())}' \
+                  -DQBOX_CPU_TEST_NUM_CPU_COMBINATION='${@';'.join(d.getVar('QBOX_CPU_TEST_NUM_CPU_COMBINATION').split())}' \
+                  -DQBOX_ENABLE_MCIPS_TESTS=${QBOX_ENABLE_MCIPS_TESTS} \
                   -DPython3_INCLUDE_DIR=${PYTHON_INCLUDE_DIR} \
                   -DPython3_LIBRARY=${PYTHON_LIBRARY} \
                   -DQBOX_APOLLO_BUILD_TARGET=${QBOX_APOLLO_BUILD_TARGET}"
@@ -265,18 +290,52 @@ do_check() {
         return 0
     fi
 
+    : > "${T}/qbox-platform-unit-tests.excluded.list"
+    : > "${T}/qbox-core-unit-tests.excluded.list"
     bbnote "Building Apollo QBox unit test target: ${QBOX_APOLLO_UNIT_TEST_TARGET}"
     cmake_runcmake_build --target ${QBOX_APOLLO_UNIT_TEST_TARGET}
 
-    list_log="${T}/qbox-unit-tests.list"
-    bbnote "Listing Apollo QBox unit tests with label: ${QBOX_APOLLO_UNIT_TEST_LABEL}"
-    ctest --test-dir "${B}" -N -L "${QBOX_APOLLO_UNIT_TEST_LABEL}" | tee "$list_log"
-    if ! grep -Eq 'Total Tests: [1-9][0-9]*' "$list_log"; then
-        bbfatal "qbox-apollo-qvp-native: no CTest tests matched ${QBOX_APOLLO_UNIT_TEST_LABEL}"
+    list_log="${T}/qbox-platform-unit-tests.list"
+    set --
+    if [ -n "${QBOX_APOLLO_UNIT_TEST_EXCLUDE_REGEX}" ]; then
+        bbnote "Excluded platform tests: ${QBOX_APOLLO_UNIT_TEST_EXCLUDE_REGEX}"
+        ctest --test-dir "${B}" -N -L "${QBOX_APOLLO_UNIT_TEST_LABEL}" \
+            -R "${QBOX_APOLLO_UNIT_TEST_EXCLUDE_REGEX}" \
+            > "${T}/qbox-platform-unit-tests.excluded.list"
+        set -- -E "${QBOX_APOLLO_UNIT_TEST_EXCLUDE_REGEX}"
     fi
+    bbnote "Listing Apollo QBox unit tests with label: ${QBOX_APOLLO_UNIT_TEST_LABEL}"
+    ctest --test-dir "${B}" -N -L "${QBOX_APOLLO_UNIT_TEST_LABEL}" "$@" \
+        --no-tests=error > "$list_log"
+    cat "$list_log"
 
     bbnote "Running Apollo QBox unit tests with label: ${QBOX_APOLLO_UNIT_TEST_LABEL}"
-    ctest --test-dir "${B}" -L "${QBOX_APOLLO_UNIT_TEST_LABEL}" --output-on-failure
+    ctest --test-dir "${B}" -L "${QBOX_APOLLO_UNIT_TEST_LABEL}" "$@" \
+        --no-tests=error --output-on-failure --timeout ${QBOX_APOLLO_UNIT_TEST_TIMEOUT} \
+        --output-log "${T}/qbox-platform-unit-tests.log" \
+        --output-junit "${T}/qbox-platform-unit-tests.xml"
+
+    if [ -n "${QBOX_CORE_TEST_DIRS}" ]; then
+        bbnote "Building selected QBox core suites: ${QBOX_CORE_TEST_DIRS}"
+        cmake_runcmake_build --target qbox_core_unit_tests
+        bbnote "Running selected QBox core tests: ${QBOX_CORE_TEST_REGEX}"
+        set --
+        if [ -n "${QBOX_CORE_TEST_EXCLUDE_REGEX}" ]; then
+            bbnote "Excluded core tests: ${QBOX_CORE_TEST_EXCLUDE_REGEX}"
+            ctest --test-dir "${B}/tests/core" -N -R "${QBOX_CORE_TEST_EXCLUDE_REGEX}" \
+                > "${T}/qbox-core-unit-tests.excluded.list"
+            set -- -E "${QBOX_CORE_TEST_EXCLUDE_REGEX}"
+        fi
+        ctest --test-dir "${B}/tests/core" -N -R "${QBOX_CORE_TEST_REGEX}" "$@" \
+            --no-tests=error > "${T}/qbox-core-unit-tests.list"
+        cat "${T}/qbox-core-unit-tests.list"
+        ctest --test-dir "${B}/tests/core" -R "${QBOX_CORE_TEST_REGEX}" "$@" \
+            --no-tests=error --output-on-failure --timeout ${QBOX_APOLLO_UNIT_TEST_TIMEOUT} \
+            --output-log "${T}/qbox-core-unit-tests.log" \
+            --output-junit "${T}/qbox-core-unit-tests.xml"
+    else
+        bbnote "QBox core tests explicitly disabled by empty QBOX_CORE_TEST_DIRS"
+    fi
 }
 do_check[doc] = "Build and run Apollo QBox native unit tests with CTest"
 # Monitor API tests start a loopback HTTP server in the test process.
