@@ -65,6 +65,7 @@ do_install:append() {
 
     for qbox_libqemu_required in \
         "${D}${libdir}/libqemu-system-aarch64.so" \
+        "${D}${libdir}/libidlinker.so" \
         "${D}${libdir}/cmake/libqemu/libqemuConfig.cmake" \
         "${D}${includedir}/libqemu"
     do
