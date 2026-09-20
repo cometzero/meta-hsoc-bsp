@@ -5,6 +5,7 @@
 SCP_PLATFORM:pn-scp-firmware:apollo-qvp = "apollo-qvp"
 
 EXTRA_OECMAKE:append:pn-scp-firmware:apollo-qvp = " \
+    -D SCP_APOLLO_QVP_PMIC=ON \
     -D SCP_PFDI_OOR_PERIOD_US=${SCP_PFDI_OOR_PERIOD_US} \
     -D SCP_PFDI_BOOT_TIMEOUT_US=${SCP_PFDI_BOOT_TIMEOUT_US} \
     -D SCP_PFDI_ONLINE_TIMEOUT_US=${SCP_PFDI_ONLINE_TIMEOUT_US} \
