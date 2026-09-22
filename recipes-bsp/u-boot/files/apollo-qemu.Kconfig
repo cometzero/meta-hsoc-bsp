@@ -1,0 +1,11 @@
+
+# The standalone Linux-image entry uses QEMU's x0 device tree handoff.
+config APOLLO_QEMU_STANDALONE
+	def_bool y
+	select LINUX_KERNEL_IMAGE_HEADER
+	select POSITION_INDEPENDENT
+	select SAVE_PREV_BL_FDT_ADDR
+	select OF_BOARD
+
+config LNX_KRNL_IMG_TEXT_OFFSET_BASE
+	default 0x80000000
