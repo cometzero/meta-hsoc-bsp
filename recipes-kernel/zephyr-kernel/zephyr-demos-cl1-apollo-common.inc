@@ -4,7 +4,7 @@
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-SRC_URI:append:apollo-qvp = " file://pfdi-tx-irq"
+SRC_URI:append:apollo-qvp = " file://pfdi-tx-irq file://0001-veth-restore-resource-table-on-reattach.patch;apply=no"
 
 ZEPHYR_DEMOS_CL1_APOLLO_GIT_DEPS = "cmsis libmetal open-amp"
 ZEPHYR_DEMOS_CL1_APOLLO_MODULE_SUFFIXES = "\
@@ -42,7 +42,9 @@ EXTERNALSRC:pn-zephyr-demos-cl1 = "${HSOC_APOLLO_ZEPHYRPROJECT_SRC}"
 EXTERNALSRC_BUILD:pn-zephyr-demos-cl1 = "${WORKDIR}/build"
 EXTERNALSRC_SYMLINKS:pn-zephyr-demos-cl1 = ""
 
-ZEPHYR_SRC_DIR = "${ZEPHYR_SAFETY_ISLAND_MODULE}/apps/sample"
+APOLLO_SAFETY_ISLAND_MODULE = "${ZEPHYR_SAFETY_ISLAND_MODULE}"
+APOLLO_SAFETY_ISLAND_MODULE:apollo-qvp = "${WORKDIR}/apollo-safety-island"
+ZEPHYR_SRC_DIR = "${APOLLO_SAFETY_ISLAND_MODULE}/apps/sample"
 HSOC_APOLLO_ZEPHYR_HSOC_MODULE = "${HSOC_APOLLO_ZEPHYR_HSOC_SRC}"
 PFDI_TX_IRQ_MODULE = "${UNPACKDIR}/pfdi-tx-irq"
 
@@ -59,7 +61,7 @@ python () {
 
     source_root = d.getVar("S")
     unpack_root = os.path.join(d.getVar("UNPACKDIR"), "git")
-    safety_island = d.getVar("ZEPHYR_SAFETY_ISLAND_MODULE")
+    safety_island = d.getVar("APOLLO_SAFETY_ISLAND_MODULE")
     hsoc_module = d.getVar("HSOC_APOLLO_ZEPHYR_HSOC_MODULE")
     pfdi_tx_irq_module = d.getVar("PFDI_TX_IRQ_MODULE")
     module_separator = r"\;"
@@ -75,6 +77,7 @@ python () {
     modules = d.getVar("ZEPHYR_MODULES") or ""
     modules = modules.replace(f"{source_root}/", f"{unpack_root}/")
     modules = modules.replace(os.path.join(unpack_root, "safety_island"), safety_island)
+    modules = modules.replace(d.getVar("ZEPHYR_SAFETY_ISLAND_MODULE"), safety_island)
     if hsoc_module:
         modules = f"{modules}{module_separator}{hsoc_module}"
 
@@ -91,8 +94,33 @@ python () {
     d.setVar("ZEPHYR_MODULES", module_separator.join(filtered_modules) + module_separator)
 }
 
+# externalsrc deliberately skips do_patch. Patch a disposable module copy,
+# never the externally managed safety-island reference checkout.
+python do_prepare_apollo_hipc() {
+    import os
+    import shutil
+    import subprocess
+
+    if "apollo-qvp" not in (d.getVar("MACHINEOVERRIDES") or "").split(":"):
+        return
+    destination = d.getVar("APOLLO_SAFETY_ISLAND_MODULE")
+    expected = os.path.join(d.getVar("WORKDIR"), "apollo-safety-island")
+    if destination != expected:
+        bb.fatal("Unexpected generated safety-island module path")
+    if os.path.exists(destination):
+        shutil.rmtree(destination)
+    shutil.copytree(d.getVar("ZEPHYR_SAFETY_ISLAND_MODULE"), destination,
+                    ignore=shutil.ignore_patterns(".git"))
+    subprocess.run(["patch", "--batch", "--forward", "-p1", "-i",
+                    os.path.join(d.getVar("UNPACKDIR"),
+                                 "0001-veth-restore-resource-table-on-reattach.patch")],
+                   cwd=destination, check=True)
+}
+addtask prepare_apollo_hipc after do_unpack before do_configure
+
 python () {
     checksums = " ${HSOC_APOLLO_ZEPHYR_SRC}:True ${ZEPHYR_SAFETY_ISLAND_MODULE}:True ${HSOC_APOLLO_ZEPHYR_HSOC_SRC}:True"
     d.appendVarFlag("do_configure", "file-checksums", checksums)
     d.appendVarFlag("do_compile", "file-checksums", checksums)
+    d.appendVarFlag("do_prepare_apollo_hipc", "file-checksums", checksums)
 }

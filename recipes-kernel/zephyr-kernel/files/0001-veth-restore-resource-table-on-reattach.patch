@@ -1,0 +1,255 @@
+Subject: [PATCH] veth: republish HIPC resources before AP reattach ACK
+
+AP-only reset retains the SI but AP boot firmware can clear shared resources.
+Restore the SI-owned template and rings before acknowledging attach. Serialize
+mailbox lifecycle and VQ work on the existing work item; protect TX against
+concurrent teardown without waiting for remote buffers under the link lock.
+
+Upstream-Status: Inappropriate [Apollo QVP retained-SI reset integration]
+
+--- a/drivers/ethernet/veth_rpmsg.c
++++ b/drivers/ethernet/veth_rpmsg.c
+@@ -13,6 +13,8 @@
+ #include <zephyr/devicetree.h>
+ #include <zephyr/drivers/mbox.h>
+ #include <zephyr/kernel.h>
++#include <zephyr/sys/atomic.h>
++#include <zephyr/sys/barrier.h>
+ #include <zephyr/logging/log.h>
+ #include <zephyr/net/ethernet.h>
+ #include <zephyr/net/net_if.h>
+@@ -60,6 +62,7 @@
+ 
+ struct veth_rpmsg_ctx {
+ 	struct k_work notify_work;
++	atomic_t pending_events;
+ 
+ 	struct net_if *iface;
+ 	uint8_t mac[MAC_LENGTH];
+@@ -111,6 +114,7 @@
+ static struct veth_rpmsg_ctx veth_rpmsg_context;
+ 
+ bool rpmsg_ready;
++static K_MUTEX_DEFINE(veth_link_lock);
+ 
+ static int mailbox_notify(void *priv, uint32_t vqid)
+ {
+@@ -427,31 +431,56 @@
+ 	return -1;
+ }
+ 
+-static void
+-platform_mbox_callback(const struct device *dev, uint32_t id,
+-		       void *context, struct mbox_msg *msg)
++static int restore_rsc_table(struct veth_rpmsg_ctx *ctx)
++{
++	struct fw_resource_table *source;
++	int size;
++	const struct veth_rpmsg_conf *cfg = ctx->cfg;
++
++	/* This SI firmware template is never handed to OpenAMP. The shared
++	 * copy and rings may have been cleared by the AP boot firmware.
++	 */
++	rsc_table_get(&source, &size);
++	if (size <= 0 || size > cfg->rsc_table_size ||
++	    (uintptr_t)source == cfg->rsc_table_addr ||
++	    source->hdr.ver != 1 || source->hdr.num == 0)
++		return -EINVAL;
++
++	memset((void *)cfg->shm_addr, 0, cfg->shm_size);
++	memcpy((void *)cfg->rsc_table_addr, source, size);
++	/* Both shared regions are mapped non-cacheable by the HIPC overlay. */
++	barrier_dmem_fence_full();
++	return 0;
++}
++
++static void process_mbox_event(struct veth_rpmsg_ctx *ctx, uint32_t id)
+ {
+ 	int ret;
+-	struct veth_rpmsg_ctx *ctx = context;
+ 
+-	switch (ctx->rpmsg_state) {
+-	case RPMSG_ATTACH:
+-		if (id == RPMSG_DETACH_CH_ID || id == RPMSG_ATTACH_CH_ID) {
++	if (id == RPMSG_ATTACH_CH_ID || id == RPMSG_DETACH_CH_ID) {
++		rpmsg_ready = false;
++		if (ctx->rpmsg_state == RPMSG_ATTACH)
+ 			veth_rpmsg_destroy_vdev(ctx);
+-			ctx->rpmsg_state = RPMSG_DETACH;
+-			rpmsg_ready = false;
+-			if (id == RPMSG_ATTACH_CH_ID)
+-				mbox_send_dt(&ctx->mbox[RPMSG_ACK_MBX_ID].spec,
+-					     NULL);
+-			LOG_INF("RPMSG Endpoint: DETACHED\n");
+-		} else {
+-			(void)k_work_submit(&ctx->notify_work);
++		ctx->rpmsg_state = RPMSG_DETACH;
++		LOG_INF("RPMSG Endpoint: DETACHED\n");
++		if (id == RPMSG_ATTACH_CH_ID) {
++			ret = restore_rsc_table(ctx);
++			if (!ret)
++				ret = mbox_send_dt(&ctx->mbox[RPMSG_ACK_MBX_ID].spec, NULL);
++			if (ret)
++				LOG_ERR("RPMSG reattach publication/ACK failed: %d", ret);
+ 		}
++		return;
++	}
++
++	switch (ctx->rpmsg_state) {
++	case RPMSG_ATTACH:
++		ret = rproc_virtio_notified(ctx->rvdev.vdev, VRING1_ID);
++		if (ret)
++			LOG_ERR("Failed to notify rproc virtio: %d", ret);
+ 		break;
+ 	case RPMSG_DETACH:
+-		if (id == RPMSG_ATTACH_CH_ID) {
+-			mbox_send_dt(&ctx->mbox[RPMSG_ACK_MBX_ID].spec, NULL);
+-		} else {
++		{
+ 			ret = veth_rpmsg_setup_vdev(ctx);
+ 			if (ret) {
+ 				LOG_ERR("Failed to create rpmsg virtio device.\n");
+@@ -470,12 +499,35 @@
+ static void notify_handler(struct k_work *work)
+ {
+ 	struct veth_rpmsg_ctx *ctx = CONTAINER_OF(work, struct veth_rpmsg_ctx, notify_work);
+-	int ret;
++	atomic_val_t events;
+ 
+-	ret = rproc_virtio_notified(ctx->rvdev.vdev, VRING1_ID);
+-	if (ret)
+-		LOG_ERR("Failed to notify rproc virtio: %d\n", ret);
++	while ((events = atomic_set(&ctx->pending_events, 0)) != 0) {
++		k_mutex_lock(&veth_link_lock, K_FOREVER);
++		/* An attach supersedes old VQ kicks. The AP cannot publish new
++		 * rings until the ACK, issued only after publication completes.
++		 */
++		if (events & BIT(RPMSG_ATTACH_CH_ID))
++			process_mbox_event(ctx, RPMSG_ATTACH_CH_ID);
++		else if (events & BIT(RPMSG_DETACH_CH_ID))
++			process_mbox_event(ctx, RPMSG_DETACH_CH_ID);
++		else
++			process_mbox_event(ctx, 0);
++		k_mutex_unlock(&veth_link_lock);
++	}
++}
+ 
++static void platform_mbox_callback(const struct device *dev, uint32_t id,
++				  void *context, struct mbox_msg *msg)
++{
++	struct veth_rpmsg_ctx *ctx = context;
++
++	if (id > RPMSG_ATTACH_CH_ID)
++		return;
++	if (id == RPMSG_ATTACH_CH_ID || id == RPMSG_DETACH_CH_ID)
++		atomic_set(&ctx->pending_events, BIT(id));
++	else
++		atomic_or(&ctx->pending_events, BIT(id));
++	(void)k_work_submit(&ctx->notify_work);
+ }
+ 
+ void load_rsc_table(struct fw_resource_table *rsc_tab_addr, int rsc_tab_size)
+@@ -534,16 +586,16 @@
+ 		mbox = &ctx->mbox[i];
+ 
+ 		if (mbox_is_ready_dt(&mbox->spec) && mbox->mbox_cb) {
+-			ret = mbox_set_enabled_dt(&mbox->spec, 1);
++			ret = mbox_register_callback_dt(&mbox->spec,
++							mbox->mbox_cb, ctx);
+ 			if (ret) {
+-				LOG_ERR("Failed to enable rx mbox device.\n");
++				LOG_ERR("Failed to register mbox callback.\n");
+ 				return ret;
+ 			}
+ 
+-			ret = mbox_register_callback_dt(&mbox->spec,
+-							mbox->mbox_cb, ctx);
++			ret = mbox_set_enabled_dt(&mbox->spec, 1);
+ 			if (ret) {
+-				LOG_ERR("Failed to register mbox callback.\n");
++				LOG_ERR("Failed to enable rx mbox device.\n");
+ 				return ret;
+ 			}
+ 		}
+@@ -558,6 +610,11 @@
+ 	struct metal_init_params metal_params = METAL_INIT_DEFAULTS;
+ 	int ret;
+ 
++	/* A pending AP attach may arrive as soon as RX is enabled. */
++	ctx->cfg = cfg;
++	ctx->rpmsg_state = RPMSG_DETACH;
++	ctx->sc_ept.priv = ctx;
++
+ 	ret = metal_init(&metal_params);
+ 	if (ret) {
+ 		LOG_ERR("Failed to initialize metal: %d\n", ret);
+@@ -639,13 +696,13 @@
+ 	const struct veth_rpmsg_conf *cfg = dev->config;
+ 	int ret;
+ 
++	ctx->iface = iface;
+ 	ret = veth_rpmsg_platform_init(cfg, ctx);
+ 	if (ret) {
+ 		LOG_ERR("Failed to initialize platform.\n");
+ 		return;
+ 	}
+ 
+-	ctx->iface = iface;
+ 	ethernet_init(iface);
+ 
+ 	if (net_if_set_link_addr(iface, ctx->mac, MAC_LENGTH, NET_LINK_ETHERNET) < 0) {
+@@ -700,12 +757,11 @@
+ 	struct veth_rpmsg_ctx *ctx = dev->data;
+ 	uint8_t frame_buf[NET_ETH_MAX_FRAME_SIZE];
+ 	size_t packet_length = net_pkt_get_len(pkt);
++#if defined(CONFIG_NET_GPTP)
+ 	struct gptp_hdr *gptp_hdr = NULL;
++#endif
+ 	int ret;
+ 
+-	if (!rpmsg_ready)
+-		return -EIO;
+-
+ 	if (net_pkt_read(pkt, frame_buf, packet_length)) {
+ 		LOG_ERR("Packet read failed.\n");
+ 		return -EIO;
+@@ -715,15 +771,15 @@
+ 	gptp_hdr = update_gptp_tx(net_pkt_iface(pkt), pkt);
+ #endif /* CONFIG_NET_GPTP */
+ 
+-	/* Don't allow PTP messages to be delayed */
+-	ret = rpmsg_trysend(&ctx->sc_ept, frame_buf, packet_length);
+-	if (ret == -ENOMEM) {
+-		if (gptp_hdr) {
+-			LOG_WRN("No TX buffer available.\n");
+-			return ret;
+-		}
+-		ret = rpmsg_send(&ctx->sc_ept, frame_buf, packet_length);
+-	}
++	/* Never wait for buffers from a dead AP while holding the lifecycle
++	 * lock. Backpressure drops this packet; the network stack may retry.
++	 */
++	if (k_mutex_lock(&veth_link_lock, K_NO_WAIT))
++		return -EAGAIN;
++	ret = rpmsg_ready ? rpmsg_trysend(&ctx->sc_ept, frame_buf, packet_length) : -EIO;
++	k_mutex_unlock(&veth_link_lock);
++	if (ret == RPMSG_ERR_NO_BUFF || ret == -ENOMEM)
++		return -EAGAIN;
+ 	if (ret < 0) {
+ 		LOG_ERR("Rpmsg endpoint not ready or sending failed.\n");
+ 		return -EIO;
+@@ -740,13 +796,7 @@
+ 
+ static int veth_rpmsg_start(const struct device *dev)
+ {
+-	struct veth_rpmsg_ctx *ctx = dev->data;
+-	const struct veth_rpmsg_conf *cfg = dev->config;
+-
+-	ctx->rpmsg_state = RPMSG_DETACH;
+-	ctx->sc_ept.priv = ctx;
+-	ctx->cfg = cfg;
+-
++	/* Platform initialization owns the mailbox epoch, not interface up. */
+ 	return 0;
+ }
+ 
