@@ -12,6 +12,10 @@ KCONFIG_MODE:pn-linux-yocto:apollo-qvp = "alldefconfig"
 KCONFIG_MODE:pn-linux-yocto-rt:apollo-qvp = "alldefconfig"
 KERNEL_DEVICETREE:apollo-qvp = "arm/apollo-qvp.dtb"
 
+# BTF enables AutoSD systemd's BPF LSM programs. linux-yocto.inc stages
+# pahole-native before configuration and permits pahole only in this mode.
+KERNEL_DEBUG:apollo-qvp = "True"
+
 APOLLO_QVP_KERNEL_FEATURES_REMOVE = "${APOLLO_KERNEL_FEATURES_REMOVE}"
 APOLLO_QVP_KERNEL_DEFCONFIG ?= "apollo_qvp_defconfig"
 APOLLO_QVP_KERNEL_DEFCONFIG_PATH ?= "${S}/arch/${ARCH}/configs/${APOLLO_QVP_KERNEL_DEFCONFIG}"
