@@ -4,6 +4,12 @@
 
 UBOOT_MACHINE:pn-u-boot:apollo-qvp = "apollo_qvp_defconfig"
 
+# The QVP defconfig owns the platform and cfg2 configuration.
+SRC_URI:remove:pn-u-boot:apollo-qvp = " \
+    file://rd-aspen.cfg \
+    file://rd-aspen-cfg2-extra.cfg \
+"
+
 SRC_URI:append:pn-u-boot:apollo-qvp:auto-ad-nexios = " \
     file://apollo-qvp-auto-ad-nexios.cfg \
 "
