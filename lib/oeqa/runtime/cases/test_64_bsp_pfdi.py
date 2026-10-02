@@ -55,13 +55,18 @@ class PFDIBspTest(OERuntimeTestCase):
         ["test_64_bsp_pfdi.PFDIBspTest.test_01_prerequisites"]
     )
     def test_02_service(self):
+        interval_ms = int(self.td.get("PFDI_AP_INTERVAL_MS", "60"))
+        config_message = (
+            f"Loading config V1.0: running {self.cpu_count} tasks "
+            f"every {interval_ms} ms"
+        )
         output = self._run_ok(
             "pidof pfdi-sample-app; "
-            "grep -F 'Loading config V1.0: running 4 tasks every 60 ms' "
+            f"grep -F '{config_message}' "
             "/run/pfdi-sample-app.log"
         )
 
-        self.assertIn("Loading config V1.0: running 4 tasks every 60 ms", output)
+        self.assertIn(config_message, output)
         self.assertNotRegex(output, r"(?i)(\[error\]|permission denied|timeout)")
 
     @OETestDepends(["test_64_bsp_pfdi.PFDIBspTest.test_02_service"])
