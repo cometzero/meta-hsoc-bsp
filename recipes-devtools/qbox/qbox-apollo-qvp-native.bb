@@ -257,8 +257,8 @@ do_install() {
         "${HSOC_APOLLO_QBOX_PLATFORM_SRC}/platforms/apollo" \
         "${D}${QBOX_APOLLO_PLATFORMDIR}"
 
-    if [ ! -f "${D}${QBOX_APOLLO_PLATFORMDIR}/apollo-qvp.lua" ]; then
-        bbfatal "qbox-apollo-qvp-native: missing installed Apollo QVP Lua config: ${QBOX_APOLLO_PLATFORMDIR}/apollo-qvp.lua"
+    if [ ! -f "${D}${QBOX_APOLLO_PLATFORMDIR}/apollo-qvp-saturn-v.lua" ]; then
+        bbfatal "qbox-apollo-qvp-native: missing installed Apollo QVP Lua config: ${QBOX_APOLLO_PLATFORMDIR}/apollo-qvp-saturn-v.lua"
     fi
 
     if [ -d "${HSOC_APOLLO_QBOX_PLATFORM_SRC}/fw" ]; then
@@ -276,7 +276,7 @@ do_install() {
         echo "executable=${bindir}/platforms-vp"
         echo "library=${libdir}/libqbox.so"
         echo "module_dir=${QBOX_APOLLO_MODULEDIR}"
-        echo "platform_config=${QBOX_APOLLO_PLATFORMDIR}/apollo-qvp.lua"
+        echo "platform_config=${QBOX_APOLLO_PLATFORMDIR}/apollo-qvp-saturn-v.lua"
         echo "targets_source=${QBOX_APOLLO_REQUIRED_TARGETS_SOURCE}"
         printf "required_targets="
         printf "%s " $required_targets
