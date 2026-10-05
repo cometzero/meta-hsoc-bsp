@@ -5,6 +5,7 @@
 SCP_PLATFORM:pn-scp-firmware:apollo-qvp = "apollo-qvp"
 
 EXTRA_OECMAKE:append:pn-scp-firmware:apollo-qvp = " \
+    -D SCP_APOLLO_QVP_VMCU_SAFETY=${PFDI_MONITOR_SUPPORT} \
     -D SCP_APOLLO_QVP_PMIC=ON \
     -D SCP_ENABLE_SCMI_PERF_FAST_CHANNELS=OFF \
     -D SCP_PFDI_OOR_PERIOD_US=${SCP_PFDI_OOR_PERIOD_US} \
