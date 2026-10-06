@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 SUMMARY = "Apollo standalone native QEMU system emulator"
-DESCRIPTION = "Builds qemu-system-aarch64 with the Apollo machine from the local QEMU tree, independently of QBox and libqemu."
+DESCRIPTION = "Builds Apollo AArch64 and TC397 TriCore emulators from the local QEMU tree, independently of QBox and libqemu."
 HOMEPAGE = "https://www.qemu.org/"
 LICENSE = "GPL-2.0-only & LGPL-2.1-only & (GPL-2.0-or-later | BSD-3-Clause)"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=6541297aed25bfd5e8d893ea097e838c \
@@ -41,7 +41,7 @@ EXTRA_OECONF = "--prefix=${prefix} \
                 --bindir=${QEMU_APOLLO_BINDIR} \
                 --datadir=${datadir} \
                 --with-suffix=qemu-apollo \
-                --target-list=aarch64-softmmu \
+                --target-list=aarch64-softmmu,tricore-softmmu \
                 --cc='${CC}' --cxx='${CXX}' --host-cc='${BUILD_CC}' \
                 --extra-cflags='${CFLAGS}' --extra-ldflags='${LDFLAGS}' \
                 --python=${PYTHON} \
@@ -59,10 +59,13 @@ do_configure() {
 do_configure[dirs] = "${B}"
 
 do_compile() {
-    ninja ${PARALLEL_MAKE} qemu-system-aarch64 trace/trace-events-all
+    ninja ${PARALLEL_MAKE} qemu-system-aarch64 qemu-system-tricore trace/trace-events-all
 }
 
 do_check() {
+    ${B}/qemu-system-tricore -machine help > ${B}/tricore-machines.txt
+    grep -q '^KIT_AURIX_TC397B_TRB ' ${B}/tricore-machines.txt || \
+        bbfatal "The local QEMU binary does not provide TC397"
     ${B}/qemu-system-aarch64 --version
     ${B}/qemu-system-aarch64 -machine help > ${B}/apollo-machines.txt
     grep -q '^apollo-qvp ' ${B}/apollo-machines.txt || \
@@ -72,7 +75,7 @@ addtask check after do_compile before do_install
 
 do_install() {
     install -d ${D}${QEMU_APOLLO_BINDIR} ${D}${QEMU_APOLLO_DATADIR}
-    install -m 0755 ${B}/qemu-system-aarch64 ${D}${QEMU_APOLLO_BINDIR}/
+    install -m 0755 ${B}/qemu-system-aarch64 ${B}/qemu-system-tricore ${D}${QEMU_APOLLO_BINDIR}/
     install -m 0644 ${B}/trace/trace-events-all ${D}${QEMU_APOLLO_DATADIR}/
 }
 
@@ -86,6 +89,7 @@ python do_deploy() {
     manifest = {
         'schema_version': 1,
         'executable': os.path.join(component, bindir, 'qemu-system-aarch64'),
+        'tricore_executable': os.path.join(component, bindir, 'qemu-system-tricore'),
         'library_path': [d.getVar('STAGING_LIBDIR_NATIVE'),
                          d.getVar('STAGING_BASE_LIBDIR_NATIVE')],
         'machine': 'apollo-qvp',
