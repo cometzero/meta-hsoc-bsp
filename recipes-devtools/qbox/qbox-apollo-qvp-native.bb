@@ -284,6 +284,8 @@ do_install() {
     } > "${D}${QBOX_APOLLO_DATADIR}/qbox-apollo-qvp-provider.env"
 }
 
+EXTRA_OECMAKE_BUILD:append:task-check = " ${PARALLEL_MAKE}"
+
 do_check() {
     if ! ${@bb.utils.contains('PACKAGECONFIG', 'unit-tests', 'true', 'false', d)}; then
         bbnote "qbox-apollo-qvp-native unit tests disabled; set QBOX_APOLLO_RUN_UNIT_TESTS = \"1\" or enable PACKAGECONFIG unit-tests"
