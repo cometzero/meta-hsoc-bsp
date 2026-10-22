@@ -28,9 +28,9 @@ QBOX_APOLLO_UNIT_TEST_TARGET ?= "qbox_platform_unit_tests"
 QBOX_APOLLO_UNIT_TEST_LABEL ?= "^qbox-platform-"
 QBOX_APOLLO_UNIT_TEST_EXCLUDE_REGEX ?= ""
 QBOX_APOLLO_UNIT_TEST_TIMEOUT ?= "5"
-# Space-separated directories relative to the QBox core tests/ directory.
-# Only these suites are configured and built; the regex narrows execution.
-QBOX_CORE_TEST_DIRS ?= "components sync utils qbox"
+# Keep the default check limited to qbox-platform unit tests.
+# Opt in to core suites with space-separated paths relative to qbox/tests/.
+QBOX_CORE_TEST_DIRS ?= ""
 QBOX_CORE_TEST_REGEX ?= ".*"
 # Measured >=5s (or timed out at 5s) in the default profile on 2026-09-09.
 # Keep fast AArch64 halt/timer/UART/SMMU/shutdown tests enabled. This is an
