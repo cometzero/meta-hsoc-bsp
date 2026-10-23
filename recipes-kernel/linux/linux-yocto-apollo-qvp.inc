@@ -10,7 +10,7 @@ KBUILD_DEFCONFIG:pn-linux-yocto-rt:apollo-qvp = "apollo_qvp_defconfig"
 # symbols must resolve to their Kconfig defaults instead of being forced off.
 KCONFIG_MODE:pn-linux-yocto:apollo-qvp = "alldefconfig"
 KCONFIG_MODE:pn-linux-yocto-rt:apollo-qvp = "alldefconfig"
-KERNEL_DEVICETREE:apollo-qvp = "hsoc/apollo-qvp-saturn-v.dtb"
+KERNEL_DEVICETREE:apollo-qvp = "hsoc/${APOLLO_QVP_DTB}"
 
 # BTF enables AutoSD systemd's BPF LSM programs. linux-yocto.inc stages
 # pahole-native before configuration and permits pahole only in this mode.
